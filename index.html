@@ -22,11 +22,11 @@
   <div id="api-modal" class="modal-overlay">
     <div class="modal-glass">
       <div class="modal-icon">🔑</div>
-      <h2>Connect to Live Prices</h2>
-      <p>Enter your free <strong>Alpha Vantage</strong> API key to get real-time stock prices.<br/>
-         Get a free key at <a href="https://www.alphavantage.co/support/#api-key" target="_blank">alphavantage.co</a></p>
+      <h2>Change API Key</h2>
+      <p>Enter a <strong>Finnhub</strong> API key to use your own account.<br/>
+         Get a free key at <a href="https://finnhub.io/register" target="_blank">finnhub.io</a></p>
       <div class="input-group">
-        <input type="text" id="api-key-input" placeholder="e.g. ABCDEF123456789" autocomplete="off" />
+        <input type="text" id="api-key-input" placeholder="Finnhub API key" autocomplete="off" />
         <button class="btn-primary" onclick="saveApiKey()">Connect</button>
       </div>
       <button class="btn-ghost" onclick="useDemoMode()">Use Demo Mode (simulated data)</button>
@@ -176,7 +176,7 @@
       <!-- Last Updated -->
       <div class="footer-bar">
         <span id="last-updated">Prices not yet loaded</span>
-        <span>Powered by Alpha Vantage · <a href="https://www.alphavantage.co" target="_blank">alphavantage.co</a></span>
+        <span>Powered by Finnhub · <a href="https://finnhub.io" target="_blank">finnhub.io</a></span>
       </div>
 
     </main>

@@ -6,9 +6,10 @@
 'use strict';
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const AV_BASE       = 'https://www.alphavantage.co/query';
-const STORAGE_KEY   = 'quantara_portfolio_v2';
-const API_KEY_STORE = 'quantara_av_key';
+const FINNHUB_BASE    = 'https://finnhub.io/api/v1';
+const FINNHUB_DEFAULT = 'd6ep8bhr01qksaq9dcb0d6ep8bhr01qksaq9dcbg';
+const STORAGE_KEY     = 'quantara_portfolio_v2';
+const API_KEY_STORE   = 'quantara_fh_key';
 
 const PALETTE = [
   '#4f9eff','#a855f7','#22d3ee','#34d399','#fb923c',
@@ -40,22 +41,24 @@ let miniSparklineChart = null;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  apiKey = localStorage.getItem(API_KEY_STORE) || '';
+  // Use stored key, or fall back to the bundled Finnhub key
+  apiKey   = localStorage.getItem(API_KEY_STORE) || FINNHUB_DEFAULT;
+  demoMode = false;
+  localStorage.setItem(API_KEY_STORE, apiKey);
+
   loadPortfolio();
   updateApiIndicator();
   setMarketStatus();
 
-  if (!apiKey && !localStorage.getItem('quantara_demo_ack')) {
-    // Show modal on first load
-  } else {
-    document.getElementById('api-modal').classList.add('hidden');
-    if (portfolio.length > 0) refreshAll();
-    else seedDefaultPortfolio();
-  }
+  // Always start connected — hide the modal
+  document.getElementById('api-modal').classList.add('hidden');
+
+  if (portfolio.length > 0) refreshAll();
+  else seedDefaultPortfolio();
 
   renderAll();
 
-  // Auto-refresh every 60s when live API
+  // Auto-refresh every 60s during market hours
   setInterval(() => { if (!demoMode && apiKey) refreshAll(); }, 60000);
 });
 
@@ -78,7 +81,6 @@ function saveApiKey() {
   apiKey   = val;
   demoMode = false;
   localStorage.setItem(API_KEY_STORE, apiKey);
-  localStorage.setItem('quantara_demo_ack', '1');
   document.getElementById('api-modal').classList.add('hidden');
   updateApiIndicator();
   if (portfolio.length === 0) seedDefaultPortfolio();
@@ -88,7 +90,6 @@ function saveApiKey() {
 function useDemoMode() {
   demoMode = true;
   apiKey   = '';
-  localStorage.setItem('quantara_demo_ack', '1');
   document.getElementById('api-modal').classList.add('hidden');
   updateApiIndicator();
   if (portfolio.length === 0) seedDefaultPortfolio();
@@ -157,19 +158,20 @@ function injectDemoPrices() {
   generateAiInsight();
 }
 
-// ── Alpha Vantage API Fetch ───────────────────────────────────────────────────
+// ── Finnhub API Fetch ─────────────────────────────────────────────────────────
 async function fetchQuote(ticker) {
-  const url = `${AV_BASE}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(ticker)}&apikey=${apiKey}`;
+  const url = `${FINNHUB_BASE}/quote?symbol=${encodeURIComponent(ticker)}&token=${apiKey}`;
   const res  = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = await res.json();
-  const q    = data['Global Quote'];
-  if (!q || !q['05. price']) throw new Error('No data');
-  const price     = parseFloat(q['05. price']);
-  const prevClose = parseFloat(q['08. previous close']);
-  const change    = parseFloat(q['09. change']);
-  const changePct = parseFloat(q['10. change percent'].replace('%',''));
-  return { price, prevClose, change, changePct };
+  const q = await res.json();
+  // Finnhub returns: c=current, d=change, dp=changePct, pc=prevClose
+  if (!q || !q.c || q.c === 0) throw new Error('No data for ' + ticker);
+  return {
+    price:     +q.c.toFixed(2),
+    prevClose: +q.pc.toFixed(2),
+    change:    +q.d.toFixed(2),
+    changePct: +q.dp.toFixed(2),
+  };
 }
 
 async function refreshAll() {
