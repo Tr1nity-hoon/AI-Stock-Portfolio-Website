@@ -20,14 +20,22 @@
 <div id="api-modal" class="modal-overlay hidden">
   <div class="modal-glass">
     <div class="modal-icon">🔑</div>
-    <h2>Change API Key</h2>
-    <p>Enter a <strong>Finnhub</strong> API key to use your own account.<br/>
+    <h2>API Keys</h2>
+    <p><strong>Finnhub</strong> — Stock data &amp; news<br/>
        Free key at <a href="https://finnhub.io/register" target="_blank">finnhub.io</a></p>
     <div class="input-group row-flex">
       <input type="text" id="api-key-input" placeholder="Finnhub API key" autocomplete="off" />
       <button class="btn-primary" onclick="saveApiKey()">Connect</button>
     </div>
-    <button class="btn-ghost" style="margin-top:10px;width:100%" onclick="useDemoMode()">Use Demo Mode</button>
+    <div style="height:1px;background:var(--glass-border);margin:16px 0"></div>
+    <p><strong>Google Gemini</strong> — AI Chat Intelligence<br/>
+       Free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com</a></p>
+    <div class="input-group row-flex">
+      <input type="text" id="gemini-key-input" placeholder="Gemini API key" autocomplete="off" />
+      <button class="btn-primary" onclick="saveGeminiKey()">Save</button>
+    </div>
+    <div class="gemini-status" id="gemini-status"></div>
+    <button class="btn-ghost" style="margin-top:10px;width:100%" onclick="useDemoMode()">Use Demo Mode (Finnhub)</button>
   </div>
 </div>
 
@@ -187,7 +195,7 @@
           <div class="ai-chat-logo">✦</div>
           <div>
             <div class="ai-chat-title">Quantara AI</div>
-            <div class="ai-chat-subtitle">Financial Intelligence</div>
+            <div class="ai-chat-subtitle"><span id="ai-model-status">Powered by Gemini</span></div>
           </div>
         </div>
         <div class="ai-chat-header-right">

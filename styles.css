@@ -346,6 +346,8 @@ input::placeholder { color: var(--text-3); }
 }
 .ai-chat-title { font-family: var(--font-hd); font-size: 0.92rem; font-weight: 700; }
 .ai-chat-subtitle { font-size: 0.62rem; color: var(--text-3); letter-spacing: .03em; }
+.ai-chat-subtitle a { font-size: 0.62rem; }
+.gemini-status { font-size: 0.73rem; margin-top: 6px; min-height: 18px; }
 .ai-chat-toggle {
   width: 28px; height: 28px;
   background: var(--glass-bg2); border: 1px solid var(--glass-border);
