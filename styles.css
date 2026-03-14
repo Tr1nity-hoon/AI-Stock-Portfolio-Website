@@ -906,3 +906,279 @@ a:hover { text-decoration: underline; }
 /* ─── Price color override for hero value ────────────────────────────── */
 .hero-value.up   { background: linear-gradient(135deg, var(--accent-green), #86efac); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .hero-value.down { background: linear-gradient(135deg, var(--accent-red), #fca5a5); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+
+/* ─── Card detail hint ───────────────────────────────────────────────── */
+.card-detail-hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 10px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.stock-card:hover .card-detail-hint { opacity: 1; }
+
+/* ─── Ticker Autocomplete ────────────────────────────────────────────── */
+.ticker-autocomplete-wrap { position: relative; }
+
+.autocomplete-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: rgba(12,13,24,0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border-bright);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  z-index: 400;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+.autocomplete-dropdown.hidden { display: none; }
+
+.autocomplete-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.autocomplete-item:last-child { border-bottom: none; }
+.autocomplete-item:hover { background: rgba(79,158,255,0.10); }
+
+.ac-symbol {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  min-width: 56px;
+}
+.ac-desc {
+  font-size: 0.79rem;
+  color: var(--text-muted);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Detail Modal ───────────────────────────────────────────────────── */
+.detail-glass {
+  max-width: 820px;
+  width: 95%;
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 32px 32px 28px;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+
+.detail-close {
+  position: absolute;
+  top: 20px; right: 20px;
+  width: 32px; height: 32px;
+  background: var(--glass-bg2);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.2s, border-color 0.2s;
+  z-index: 2;
+}
+.detail-close:hover { color: var(--text-primary); border-color: var(--glass-border-bright); }
+
+/* Detail Header */
+.detail-stock-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding-right: 40px;
+}
+
+.detail-logo {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  border: 1px solid;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.detail-ticker {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 3px;
+}
+.detail-name { font-size: 0.78rem; color: var(--text-muted); }
+
+.detail-price-block { margin-left: auto; text-align: right; }
+.detail-price {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.detail-day-change { font-size: 0.85rem; font-weight: 600; }
+
+.detail-pnl-block {
+  text-align: right;
+  padding-left: 20px;
+  border-left: 1px solid var(--glass-border);
+}
+.detail-pnl-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+.detail-pnl-value { font-size: 0.95rem; font-weight: 600; }
+
+/* Range Tabs */
+.detail-range-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.range-btn {
+  padding: 5px 16px;
+  background: var(--glass-bg2);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.range-btn:hover,
+.range-btn.active {
+  background: rgba(79,158,255,0.12);
+  border-color: rgba(79,158,255,0.40);
+  color: var(--accent-blue);
+}
+
+/* Detail Chart */
+.detail-chart-wrap {
+  position: relative;
+  height: 220px;
+  margin-bottom: 20px;
+}
+.detail-chart-wrap canvas { width: 100% !important; }
+
+.detail-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  background: rgba(6,7,15,0.6);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(4px);
+}
+
+.loading-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.12);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Detail Bottom */
+.detail-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 14px;
+}
+@media (max-width: 640px) {
+  .detail-bottom { grid-template-columns: 1fr; }
+  .detail-price-block { display: none; }
+}
+
+.detail-metrics-card,
+.detail-news-card { padding: 18px 20px; }
+
+.detail-section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+/* Metrics grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.metric-item {
+  padding: 9px 11px;
+  background: var(--glass-bg2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--glass-border);
+}
+.metric-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+.metric-value { font-size: 0.88rem; font-weight: 600; }
+
+.metrics-loading,
+.news-loading,
+.data-unavailable {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 6px 0;
+}
+
+/* News */
+.news-item {
+  display: block;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--glass-border);
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.news-item:last-child { border-bottom: none; }
+.news-item:hover { opacity: 0.75; }
+
+.news-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.news-source {
+  font-size: 0.68rem;
+  color: var(--accent-blue);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.news-date { font-size: 0.68rem; color: var(--text-muted); }
+.news-headline {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}

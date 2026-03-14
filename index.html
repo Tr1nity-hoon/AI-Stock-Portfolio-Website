@@ -40,9 +40,10 @@
       <h2>Add Stock</h2>
       <p>Enter a ticker symbol and the number of shares you hold.</p>
       <div class="input-row">
-        <div class="input-group">
+        <div class="input-group ticker-autocomplete-wrap">
           <label>Ticker Symbol</label>
-          <input type="text" id="new-ticker" placeholder="e.g. AAPL" style="text-transform:uppercase" />
+          <input type="text" id="new-ticker" placeholder="Search symbol or company…" autocomplete="off" />
+          <div class="autocomplete-dropdown hidden" id="ticker-dropdown"></div>
         </div>
         <div class="input-group">
           <label>Shares</label>
@@ -180,6 +181,40 @@
       </div>
 
     </main>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="detail-modal" class="modal-overlay hidden" onclick="handleDetailOverlayClick(event)">
+    <div class="modal-glass detail-glass">
+      <button class="detail-close" onclick="closeDetailModal()">✕</button>
+
+      <div id="detail-header" class="detail-header"></div>
+
+      <div class="detail-range-tabs">
+        <button class="range-btn active" data-range="D" onclick="loadDetailRange('D',this)">1D</button>
+        <button class="range-btn" data-range="W" onclick="loadDetailRange('W',this)">1W</button>
+        <button class="range-btn" data-range="M" onclick="loadDetailRange('M',this)">1M</button>
+        <button class="range-btn" data-range="3M" onclick="loadDetailRange('3M',this)">3M</button>
+      </div>
+
+      <div class="detail-chart-wrap">
+        <canvas id="detail-chart" height="220"></canvas>
+        <div class="detail-loading" id="detail-chart-loading">
+          <div class="loading-spinner"></div>
+          Loading chart…
+        </div>
+      </div>
+
+      <div class="detail-bottom">
+        <div class="detail-metrics-card glass-card" id="detail-metrics">
+          <div class="detail-section-label">Key Metrics</div>
+        </div>
+        <div class="detail-news-card glass-card">
+          <div class="detail-section-label">Recent News</div>
+          <div id="detail-news">Loading…</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
