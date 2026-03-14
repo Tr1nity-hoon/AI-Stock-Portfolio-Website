@@ -180,12 +180,52 @@
       </div>
     </section>
 
-    <!-- ② AI Insight ─────────────────────────────── -->
-    <div class="ai-banner glass-card">
-      <div class="ai-banner-icon">✦</div>
-      <div class="ai-banner-text">
-        <div class="ai-banner-label">AI Insight</div>
-        <div class="ai-banner-content" id="ai-insight">Analyzing your portfolio…</div>
+    <!-- ② AI Chat ──────────────────────────────── -->
+    <div class="ai-chat-panel glass-card" id="ai-chat-panel">
+      <div class="ai-chat-header">
+        <div class="ai-chat-header-left">
+          <div class="ai-chat-logo">✦</div>
+          <div>
+            <div class="ai-chat-title">Quantara AI</div>
+            <div class="ai-chat-subtitle">Financial Intelligence</div>
+          </div>
+        </div>
+        <div class="ai-chat-header-right">
+          <button class="ai-chat-clear btn-ghost btn-sm" onclick="clearChat()">Clear</button>
+          <button class="ai-chat-toggle" id="ai-chat-toggle" onclick="toggleChatExpand()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="ai-chat-messages" id="ai-chat-messages">
+        <div class="ai-welcome-msg">
+          <div class="ai-welcome-icon">✦</div>
+          <div class="ai-welcome-title">Ask me anything about your portfolio</div>
+          <div class="ai-welcome-sub">I analyze your holdings, market sentiment, and financial metrics in real-time.</div>
+        </div>
+      </div>
+
+      <div class="ai-suggestions" id="ai-suggestions">
+        <button class="ai-suggest-btn" onclick="askSuggestion(this)" data-q="How is my portfolio performing?">
+          <span class="ai-suggest-icon">📊</span> Portfolio Analysis
+        </button>
+        <button class="ai-suggest-btn" onclick="askSuggestion(this)" data-q="What's the market sentiment for my stocks?">
+          <span class="ai-suggest-icon">🎯</span> Sentiment Analysis
+        </button>
+        <button class="ai-suggest-btn" onclick="askSuggestion(this)" data-q="Should I diversify my portfolio?">
+          <span class="ai-suggest-icon">⚖️</span> Diversification Check
+        </button>
+        <button class="ai-suggest-btn" onclick="askSuggestion(this)" data-q="What are the top movers today?">
+          <span class="ai-suggest-icon">🔥</span> Top Movers
+        </button>
+      </div>
+
+      <div class="ai-chat-input-wrap">
+        <input type="text" class="ai-chat-input" id="ai-chat-input" placeholder="Ask about your portfolio, stocks, or market…" autocomplete="off" />
+        <button class="ai-chat-send" id="ai-chat-send" onclick="sendChatMessage()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+        </button>
       </div>
     </div>
 

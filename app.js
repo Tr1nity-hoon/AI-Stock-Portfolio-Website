@@ -882,26 +882,664 @@ function selectTicker(symbol,name) {
   document.getElementById('new-shares').focus();
 }
 
-// ── AI Insight ────────────────────────────────────────────────────────────────
-function generateAiInsight() {
-  if (!portfolio.length) { document.getElementById('ai-insight').textContent='Add stocks to receive AI insights.'; return; }
-  const tv=totalValue(),tc=totalCost(),gain=tv-tc,gainPct=tc?(gain/tc)*100:0,dg=totalDayGain();
-  const sorted=[...portfolio].sort((a,b)=>stockGainPct(b)-stockGainPct(a));
-  const best=sorted[0],worst=sorted[sorted.length-1];
-  const techTickers=['AAPL','MSFT','NVDA','TSLA','GOOGL','AMZN','META','ADBE','CRM','AMD','INTC','NFLX'];
-  const techPct=(portfolio.filter(s=>techTickers.includes(s.ticker)).length/portfolio.length)*100;
-  const ins=[];
-  if (gainPct>15)       ins.push(`Portfolio up ${fmtPct(gainPct)} — strong performance.`);
-  else if (gainPct>5)   ins.push(`Solid gain of ${fmtPct(gainPct)} — above conservative benchmarks.`);
-  else if (gainPct<-10) ins.push(`Down ${fmtPct(Math.abs(gainPct))} — consider reviewing laggards.`);
-  else                  ins.push(`Portfolio gain of ${fmtPct(gainPct)}, broadly in line with market.`);
-  if (best&&stockGainPct(best)>0) ins.push(`${best.ticker} leads at ${fmtPct(stockGainPct(best))}.`);
-  if (worst&&stockGainPct(worst)<-5) ins.push(`${worst.ticker} is lagging at ${fmtPct(stockGainPct(worst))}.`);
-  if (techPct>60) ins.push(`${techPct.toFixed(0)}% tech concentration — consider diversifying.`);
-  else if (portfolio.length<4) ins.push(`Only ${portfolio.length} positions — more holdings reduce risk.`);
-  if (dg>0) ins.push(`Up ${fmtUSD(dg)} today.`); else if (dg<0) ins.push(`Down ${fmtUSD(Math.abs(dg))} today.`);
-  document.getElementById('ai-insight').textContent=ins.slice(0,3).join(' ');
+// ── AI Chat Engine ────────────────────────────────────────────────────────────
+let chatExpanded = false;
+let chatHistory = [];
+let newsCache = new Map(); // ticker → { articles, fetchedAt }
+const NEWS_CACHE_TTL = 10 * 60 * 1000;
+
+// Sector classifications
+const SECTORS = {
+  Tech:     ['AAPL','MSFT','NVDA','GOOGL','AMZN','META','ADBE','CRM','AMD','INTC','NFLX','AVGO','QCOM','SHOP','SNOW','PLTR'],
+  Finance:  ['JPM','V','MA','PYPL','COIN','GS','BAC','C','WFC','AXP','BLK','SCHW'],
+  Health:   ['JNJ','UNH','LLY','ABBV','MRK','PFE','TMO','ABT','DHR','BMY'],
+  Consumer: ['WMT','PG','KO','PEP','COST','MCD','HD','NKE','SBUX','TGT'],
+  Energy:   ['XOM','CVX','COP','SLB','EOG','MPC','PSX','VLO','OXY','HAL'],
+  EV:       ['TSLA','RIVN','LCID','NIO','LI','XPEV'],
+  Gaming:   ['RBLX','EA','TTWO','ATVI','U'],
+  ETF:      ['SPY','QQQ','GLD','TLT','IWM','VTI','VOO','DIA'],
+};
+
+function getSector(ticker) {
+  for (const [sector, tickers] of Object.entries(SECTORS)) {
+    if (tickers.includes(ticker)) return sector;
+  }
+  return 'Other';
 }
+
+// Sentiment keywords for news analysis
+const POSITIVE_WORDS = ['surge','soar','rally','gain','beat','record','strong','growth','upgrade','outperform','bullish','positive','profit','revenue beat','raise','optimistic','breakthrough','innovation','expand','acquisition','approval'];
+const NEGATIVE_WORDS = ['crash','plunge','drop','fall','miss','weak','decline','downgrade','underperform','bearish','negative','loss','layoff','lawsuit','investigation','warning','risk','recession','concern','sell-off','cut','slowdown'];
+
+function analyzeSentiment(text) {
+  if (!text) return { score: 0, label: 'Neutral' };
+  const lower = text.toLowerCase();
+  let pos = 0, neg = 0;
+  POSITIVE_WORDS.forEach(w => { if (lower.includes(w)) pos++; });
+  NEGATIVE_WORDS.forEach(w => { if (lower.includes(w)) neg++; });
+  const total = pos + neg;
+  if (total === 0) return { score: 0, label: 'Neutral', color: 'var(--text-2)' };
+  const score = ((pos - neg) / total * 100);
+  if (score > 25) return { score: +score.toFixed(0), label: 'Bullish', color: 'var(--green)' };
+  if (score < -25) return { score: +score.toFixed(0), label: 'Bearish', color: 'var(--red)' };
+  return { score: +score.toFixed(0), label: 'Mixed', color: 'var(--amber)' };
+}
+
+async function getCachedNews(ticker) {
+  const cached = newsCache.get(ticker);
+  if (cached && Date.now() - cached.fetchedAt < NEWS_CACHE_TTL) return cached.articles;
+  try {
+    const articles = await fetchNewsFor(ticker);
+    newsCache.set(ticker, { articles, fetchedAt: Date.now() });
+    return articles;
+  } catch { return []; }
+}
+
+function toggleChatExpand() {
+  chatExpanded = !chatExpanded;
+  document.getElementById('ai-chat-panel').classList.toggle('expanded', chatExpanded);
+  const btn = document.getElementById('ai-chat-toggle');
+  btn.innerHTML = chatExpanded
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 7L7 17M7 17H17M7 17V7"/></svg>'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17L17 7M17 7H7M17 7V17"/></svg>';
+}
+
+function clearChat() {
+  chatHistory = [];
+  const el = document.getElementById('ai-chat-messages');
+  el.innerHTML = `
+    <div class="ai-welcome-msg">
+      <div class="ai-welcome-icon">✦</div>
+      <div class="ai-welcome-title">Ask me anything about your portfolio</div>
+      <div class="ai-welcome-sub">I analyze your holdings, market sentiment, and financial metrics in real-time.</div>
+    </div>`;
+  document.getElementById('ai-suggestions').style.display = '';
+}
+
+function askSuggestion(btn) {
+  const q = btn.dataset.q;
+  document.getElementById('ai-chat-input').value = q;
+  sendChatMessage();
+}
+
+function addUserMessage(text) {
+  const el = document.getElementById('ai-chat-messages');
+  document.getElementById('ai-suggestions').style.display = 'none';
+  const welcome = el.querySelector('.ai-welcome-msg');
+  if (welcome) welcome.remove();
+
+  const msg = document.createElement('div');
+  msg.className = 'ai-msg ai-msg-user';
+  msg.innerHTML = `<div class="ai-msg-bubble user">${escHtml(text)}</div>`;
+  el.appendChild(msg);
+  el.scrollTop = el.scrollHeight;
+}
+
+function addAiMessage(html, sources) {
+  const el = document.getElementById('ai-chat-messages');
+  const msg = document.createElement('div');
+  msg.className = 'ai-msg ai-msg-ai';
+
+  let srcHtml = '';
+  if (sources && sources.length) {
+    srcHtml = `<div class="ai-sources"><div class="ai-sources-label">Sources</div>${sources.map(s =>
+      `<a class="ai-source-chip" href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer"><span class="ai-source-icon">📄</span>${escHtml(s.name)}</a>`
+    ).join('')}</div>`;
+  }
+
+  msg.innerHTML = `
+    <div class="ai-msg-avatar">✦</div>
+    <div class="ai-msg-bubble ai">
+      <div class="ai-msg-content">${html}</div>
+      ${srcHtml}
+    </div>`;
+  el.appendChild(msg);
+
+  // Animate typing effect
+  const content = msg.querySelector('.ai-msg-content');
+  content.style.opacity = '0';
+  requestAnimationFrame(() => {
+    content.style.transition = 'opacity 0.3s ease';
+    content.style.opacity = '1';
+  });
+
+  el.scrollTop = el.scrollHeight;
+}
+
+function addLoadingMessage() {
+  const el = document.getElementById('ai-chat-messages');
+  const msg = document.createElement('div');
+  msg.className = 'ai-msg ai-msg-ai ai-loading-msg';
+  msg.innerHTML = `
+    <div class="ai-msg-avatar">✦</div>
+    <div class="ai-msg-bubble ai">
+      <div class="ai-typing">
+        <span></span><span></span><span></span>
+        <span class="ai-typing-text">Analyzing...</span>
+      </div>
+    </div>`;
+  el.appendChild(msg);
+  el.scrollTop = el.scrollHeight;
+  return msg;
+}
+
+function removeLoadingMessage() {
+  const msg = document.querySelector('.ai-loading-msg');
+  if (msg) msg.remove();
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('ai-chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  addUserMessage(text);
+
+  if (!chatExpanded) {
+    chatExpanded = true;
+    document.getElementById('ai-chat-panel').classList.add('expanded');
+    document.getElementById('ai-chat-toggle').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 7L7 17M7 17H17M7 17V7"/></svg>';
+  }
+
+  const loading = addLoadingMessage();
+  await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
+
+  const response = await generateAiResponse(text);
+  removeLoadingMessage();
+  addAiMessage(response.html, response.sources);
+
+  chatHistory.push({ role: 'user', text });
+  chatHistory.push({ role: 'ai', text: response.html });
+}
+
+// Main AI response router
+async function generateAiResponse(query) {
+  const q = query.toLowerCase();
+
+  if (q.includes('portfolio') && (q.includes('perform') || q.includes('how') || q.includes('doing') || q.includes('summary') || q.includes('overview')))
+    return generatePortfolioAnalysis();
+
+  if (q.includes('sentiment') || q.includes('feeling') || q.includes('mood') || q.includes('outlook'))
+    return await generateSentimentAnalysis(q);
+
+  if (q.includes('diversif') || q.includes('risk') || q.includes('allocation') || q.includes('concentrate'))
+    return generateDiversificationAnalysis();
+
+  if (q.includes('top mover') || q.includes('best') || q.includes('worst') || q.includes('winner') || q.includes('loser'))
+    return generateTopMovers();
+
+  if (q.includes('compare') || q.includes(' vs ') || q.includes('versus'))
+    return generateComparison(q);
+
+  if (q.includes('news') || q.includes('headline') || q.includes('latest'))
+    return await generateNewsDigest(q);
+
+  // Check if asking about a specific stock
+  const tickerMatch = findTickerInQuery(q);
+  if (tickerMatch) return await generateStockAnalysis(tickerMatch);
+
+  if (q.includes('buy') || q.includes('sell') || q.includes('hold') || q.includes('recommend'))
+    return generateDisclaimer();
+
+  if (q.includes('sector') || q.includes('industry') || q.includes('exposure'))
+    return generateSectorAnalysis();
+
+  if (q.includes('gain') || q.includes('loss') || q.includes('profit') || q.includes('return'))
+    return generateGainLossReport();
+
+  // Default: general portfolio analysis
+  return generatePortfolioAnalysis();
+}
+
+function findTickerInQuery(q) {
+  // Check portfolio tickers first
+  for (const s of portfolio) {
+    if (q.includes(s.ticker.toLowerCase()) || q.includes((s.name || '').toLowerCase())) return s.ticker;
+  }
+  // Check known tickers
+  for (const [ticker, name] of Object.entries(NAMES)) {
+    if (q.includes(ticker.toLowerCase()) || q.includes(name.toLowerCase())) return ticker;
+  }
+  return null;
+}
+
+function generatePortfolioAnalysis() {
+  if (!portfolio.length) return { html: '<p>Your portfolio is empty. Add stocks to get personalized analysis.</p>', sources: [] };
+
+  const tv = totalValue(), tc = totalCost(), gain = tv - tc, gainPct = tc ? (gain / tc) * 100 : 0;
+  const dg = totalDayGain();
+  const sorted = [...portfolio].sort((a, b) => stockGainPct(b) - stockGainPct(a));
+  const best = sorted[0], worst = sorted[sorted.length - 1];
+
+  // Sector breakdown
+  const sectorMap = {};
+  portfolio.forEach(s => { const sec = getSector(s.ticker); sectorMap[sec] = (sectorMap[sec] || 0) + stockValue(s); });
+  const topSector = Object.entries(sectorMap).sort((a, b) => b[1] - a[1])[0];
+
+  let verdict = '';
+  if (gainPct > 20) verdict = 'Your portfolio is significantly outperforming. Consider taking some profits on your biggest winners.';
+  else if (gainPct > 10) verdict = 'Strong performance across your holdings. The portfolio is well-positioned.';
+  else if (gainPct > 0) verdict = 'Moderate positive returns. Consider adding to positions that align with your thesis.';
+  else if (gainPct > -5) verdict = 'Slightly negative returns. Typical market fluctuation — stay the course if your thesis is intact.';
+  else verdict = 'Portfolio under pressure. Review individual positions for any fundamental changes.';
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Portfolio Overview</div>
+      <div class="ai-metrics-row">
+        <div class="ai-metric">
+          <div class="ai-metric-label">Total Value</div>
+          <div class="ai-metric-value">${fmtUSD(tv)}</div>
+        </div>
+        <div class="ai-metric">
+          <div class="ai-metric-label">Total Return</div>
+          <div class="ai-metric-value ${signCls(gain)}">${fmtUSD(gain)} (${fmtPct(gainPct)})</div>
+        </div>
+        <div class="ai-metric">
+          <div class="ai-metric-label">Today</div>
+          <div class="ai-metric-value ${signCls(dg)}">${fmtUSD(dg)}</div>
+        </div>
+      </div>
+    </div>
+    <div class="ai-response-section">
+      <div class="ai-section-title">Key Findings</div>
+      <div class="ai-finding"><span class="ai-finding-icon ${signCls(stockGainPct(best))}">▲</span> <strong>${best.ticker}</strong> is your top performer at <span class="${signCls(stockGainPct(best))}">${fmtPct(stockGainPct(best))}</span></div>
+      <div class="ai-finding"><span class="ai-finding-icon ${signCls(stockGainPct(worst))}">▼</span> <strong>${worst.ticker}</strong> is lagging at <span class="${signCls(stockGainPct(worst))}">${fmtPct(stockGainPct(worst))}</span></div>
+      <div class="ai-finding"><span class="ai-finding-icon neu">◆</span> Heaviest sector: <strong>${topSector[0]}</strong> at ${((topSector[1] / tv) * 100).toFixed(1)}% allocation</div>
+      <div class="ai-finding"><span class="ai-finding-icon neu">◆</span> ${portfolio.length} position${portfolio.length > 1 ? 's' : ''} across ${Object.keys(sectorMap).length} sector${Object.keys(sectorMap).length > 1 ? 's' : ''}</div>
+    </div>
+    <div class="ai-response-section">
+      <div class="ai-verdict">${verdict}</div>
+    </div>`;
+
+  return { html, sources: [] };
+}
+
+async function generateSentimentAnalysis(q) {
+  if (!portfolio.length) return { html: '<p>Add stocks to get sentiment analysis.</p>', sources: [] };
+
+  const tickerMatch = findTickerInQuery(q);
+  const tickers = tickerMatch ? [tickerMatch] : portfolio.map(s => s.ticker);
+
+  const results = [];
+  const sources = [];
+
+  for (const ticker of tickers.slice(0, 5)) {
+    const articles = await getCachedNews(ticker);
+    const headlines = articles.slice(0, 8);
+    const sentiments = headlines.map(a => analyzeSentiment(a.headline + ' ' + (a.summary || '')));
+    const avgScore = sentiments.length ? sentiments.reduce((s, x) => s + x.score, 0) / sentiments.length : 0;
+    const overall = avgScore > 20 ? { label: 'Bullish', color: 'var(--green)' }
+      : avgScore < -20 ? { label: 'Bearish', color: 'var(--red)' }
+      : { label: 'Neutral', color: 'var(--amber)' };
+
+    results.push({ ticker, score: avgScore, label: overall.label, color: overall.color, count: headlines.length, articles: headlines.slice(0, 3) });
+    headlines.slice(0, 2).forEach(a => { if (a.url) sources.push({ name: a.source || ticker, url: a.url }); });
+  }
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Sentiment Analysis</div>
+      <p class="ai-response-text">Based on ${results.reduce((s, r) => s + r.count, 0)} recent news articles across ${results.length} stock${results.length > 1 ? 's' : ''}:</p>
+      <div class="ai-sentiment-grid">
+        ${results.map(r => `
+          <div class="ai-sentiment-card">
+            <div class="ai-sentiment-header">
+              <strong>${r.ticker}</strong>
+              <span class="ai-sentiment-badge" style="color:${r.color};border-color:${r.color}30;background:${r.color}12">${r.label}</span>
+            </div>
+            <div class="ai-sentiment-bar-wrap">
+              <div class="ai-sentiment-bar">
+                <div class="ai-sentiment-fill" style="width:${Math.min(100, Math.max(5, 50 + r.score / 2))}%;background:${r.color}"></div>
+              </div>
+              <span class="ai-sentiment-score">${r.score > 0 ? '+' : ''}${r.score.toFixed(0)}</span>
+            </div>
+            ${r.articles.length ? `<div class="ai-sentiment-headlines">${r.articles.map(a =>
+              `<div class="ai-headline-item">
+                <span class="ai-headline-dot" style="background:${analyzeSentiment(a.headline).color}"></span>
+                ${escHtml((a.headline || '').slice(0, 80))}${(a.headline || '').length > 80 ? '…' : ''}
+              </div>`).join('')}</div>` : ''}
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  return { html, sources: sources.slice(0, 6) };
+}
+
+function generateDiversificationAnalysis() {
+  if (!portfolio.length) return { html: '<p>Add stocks to analyze diversification.</p>', sources: [] };
+
+  const tv = totalValue();
+  const sectorMap = {};
+  portfolio.forEach(s => {
+    const sec = getSector(s.ticker);
+    if (!sectorMap[sec]) sectorMap[sec] = { value: 0, stocks: [] };
+    sectorMap[sec].value += stockValue(s);
+    sectorMap[sec].stocks.push(s.ticker);
+  });
+
+  const sortedSectors = Object.entries(sectorMap).sort((a, b) => b[1].value - a[1].value);
+  const topPct = (sortedSectors[0][1].value / tv * 100);
+  const hhi = sortedSectors.reduce((s, [, d]) => s + Math.pow(d.value / tv * 100, 2), 0);
+
+  let riskLevel, riskColor, advice;
+  if (hhi > 5000) { riskLevel = 'High Concentration'; riskColor = 'var(--red)'; advice = 'Your portfolio is heavily concentrated. Consider adding positions in underrepresented sectors to reduce idiosyncratic risk.'; }
+  else if (hhi > 2500) { riskLevel = 'Moderate'; riskColor = 'var(--amber)'; advice = 'Decent diversification but room for improvement. Consider adding exposure to sectors you\'re missing.'; }
+  else { riskLevel = 'Well Diversified'; riskColor = 'var(--green)'; advice = 'Good sector spread. Your portfolio is reasonably protected against sector-specific downturns.'; }
+
+  const missingSectors = Object.keys(SECTORS).filter(s => !sectorMap[s] && s !== 'ETF');
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Diversification Analysis</div>
+      <div class="ai-metrics-row">
+        <div class="ai-metric">
+          <div class="ai-metric-label">Risk Level</div>
+          <div class="ai-metric-value" style="color:${riskColor}">${riskLevel}</div>
+        </div>
+        <div class="ai-metric">
+          <div class="ai-metric-label">Positions</div>
+          <div class="ai-metric-value">${portfolio.length}</div>
+        </div>
+        <div class="ai-metric">
+          <div class="ai-metric-label">Sectors</div>
+          <div class="ai-metric-value">${sortedSectors.length}</div>
+        </div>
+      </div>
+    </div>
+    <div class="ai-response-section">
+      <div class="ai-section-title">Sector Breakdown</div>
+      ${sortedSectors.map(([sector, data]) => `
+        <div class="ai-alloc-row">
+          <span class="ai-alloc-name">${sector}</span>
+          <span class="ai-alloc-tickers">${data.stocks.join(', ')}</span>
+          <div class="ai-alloc-bar"><div class="ai-alloc-fill" style="width:${(data.value / tv * 100).toFixed(1)}%;background:${topPct > 60 && sector === sortedSectors[0][0] ? 'var(--red)' : 'var(--teal)'}"></div></div>
+          <span class="ai-alloc-pct">${(data.value / tv * 100).toFixed(1)}%</span>
+        </div>`).join('')}
+    </div>
+    ${missingSectors.length ? `<div class="ai-response-section"><div class="ai-section-title">Missing Exposure</div><p class="ai-response-text">No exposure to: <strong>${missingSectors.join(', ')}</strong></p></div>` : ''}
+    <div class="ai-response-section">
+      <div class="ai-verdict">${advice}</div>
+    </div>`;
+
+  return { html, sources: [] };
+}
+
+function generateTopMovers() {
+  if (!portfolio.length) return { html: '<p>Add stocks to see movers.</p>', sources: [] };
+
+  const sorted = [...portfolio].filter(s => s.changePct != null).sort((a, b) => (b.changePct || 0) - (a.changePct || 0));
+  const gainers = sorted.filter(s => (s.changePct || 0) > 0);
+  const losers = [...sorted].reverse().filter(s => (s.changePct || 0) < 0);
+  const dg = totalDayGain();
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Today's Movers</div>
+      <div class="ai-metrics-row">
+        <div class="ai-metric">
+          <div class="ai-metric-label">Day's P&L</div>
+          <div class="ai-metric-value ${signCls(dg)}">${fmtUSD(dg)}</div>
+        </div>
+        <div class="ai-metric">
+          <div class="ai-metric-label">Gainers</div>
+          <div class="ai-metric-value pos">${gainers.length}</div>
+        </div>
+        <div class="ai-metric">
+          <div class="ai-metric-label">Losers</div>
+          <div class="ai-metric-value neg">${losers.length}</div>
+        </div>
+      </div>
+    </div>
+    ${gainers.length ? `<div class="ai-response-section">
+      <div class="ai-section-title">Top Gainers</div>
+      ${gainers.slice(0, 5).map(s => `
+        <div class="ai-mover-row">
+          <strong>${s.ticker}</strong>
+          <span class="ai-mover-name">${s.name || s.ticker}</span>
+          <span class="ai-mover-price">$${fmt(s.price)}</span>
+          <span class="ai-mover-change pos">${fmtPct(s.changePct)}</span>
+        </div>`).join('')}
+    </div>` : ''}
+    ${losers.length ? `<div class="ai-response-section">
+      <div class="ai-section-title">Top Losers</div>
+      ${losers.slice(0, 5).map(s => `
+        <div class="ai-mover-row">
+          <strong>${s.ticker}</strong>
+          <span class="ai-mover-name">${s.name || s.ticker}</span>
+          <span class="ai-mover-price">$${fmt(s.price)}</span>
+          <span class="ai-mover-change neg">${fmtPct(s.changePct)}</span>
+        </div>`).join('')}
+    </div>` : ''}`;
+
+  return { html, sources: [] };
+}
+
+async function generateStockAnalysis(ticker) {
+  const stock = portfolio.find(s => s.ticker === ticker);
+  const articles = await getCachedNews(ticker);
+  const sentiments = articles.slice(0, 10).map(a => analyzeSentiment(a.headline + ' ' + (a.summary || '')));
+  const avgSent = sentiments.length ? sentiments.reduce((s, x) => s + x.score, 0) / sentiments.length : 0;
+  const sentLabel = avgSent > 20 ? 'Bullish' : avgSent < -20 ? 'Bearish' : 'Neutral';
+  const sentColor = avgSent > 20 ? 'var(--green)' : avgSent < -20 ? 'var(--red)' : 'var(--amber)';
+
+  const sources = articles.slice(0, 4).filter(a => a.url).map(a => ({ name: a.source || ticker, url: a.url }));
+
+  let metricsHtml = '';
+  try {
+    const { metric: m = {} } = await fetchMetrics(ticker);
+    metricsHtml = `
+      <div class="ai-response-section">
+        <div class="ai-section-title">Key Metrics</div>
+        <div class="ai-metrics-row">
+          ${m['peAnnual'] ? `<div class="ai-metric"><div class="ai-metric-label">P/E Ratio</div><div class="ai-metric-value">${fmt(m['peAnnual'])}</div></div>` : ''}
+          ${m['epsAnnual'] ? `<div class="ai-metric"><div class="ai-metric-label">EPS</div><div class="ai-metric-value">$${fmt(m['epsAnnual'])}</div></div>` : ''}
+          ${m['marketCapitalization'] ? `<div class="ai-metric"><div class="ai-metric-label">Market Cap</div><div class="ai-metric-value">${fmtBig(m['marketCapitalization'] * 1e6)}</div></div>` : ''}
+          ${m['beta'] ? `<div class="ai-metric"><div class="ai-metric-label">Beta</div><div class="ai-metric-value">${fmt(m['beta'])}</div></div>` : ''}
+          ${m['52WeekHigh'] ? `<div class="ai-metric"><div class="ai-metric-label">52W High</div><div class="ai-metric-value">$${fmt(m['52WeekHigh'])}</div></div>` : ''}
+          ${m['52WeekLow'] ? `<div class="ai-metric"><div class="ai-metric-label">52W Low</div><div class="ai-metric-value">$${fmt(m['52WeekLow'])}</div></div>` : ''}
+        </div>
+      </div>`;
+  } catch {}
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">${ticker} — ${NAMES[ticker] || ticker}</div>
+      <div class="ai-metrics-row">
+        ${stock ? `<div class="ai-metric"><div class="ai-metric-label">Price</div><div class="ai-metric-value">$${fmt(stock.price)}</div></div>` : ''}
+        ${stock ? `<div class="ai-metric"><div class="ai-metric-label">Today</div><div class="ai-metric-value ${signCls(stock.changePct)}">${fmtPct(stock.changePct || 0)}</div></div>` : ''}
+        ${stock ? `<div class="ai-metric"><div class="ai-metric-label">Your P&L</div><div class="ai-metric-value ${signCls(stockGain(stock))}">${fmtUSD(stockGain(stock))}</div></div>` : ''}
+        <div class="ai-metric">
+          <div class="ai-metric-label">Sentiment</div>
+          <div class="ai-metric-value" style="color:${sentColor}">${sentLabel}</div>
+        </div>
+      </div>
+    </div>
+    ${metricsHtml}
+    ${articles.length ? `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Recent Headlines</div>
+      ${articles.slice(0, 5).map(a => {
+        const s = analyzeSentiment(a.headline);
+        return `<div class="ai-headline-item">
+          <span class="ai-headline-dot" style="background:${s.color}"></span>
+          ${escHtml((a.headline || '').slice(0, 100))}
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+    ${stock ? `<div class="ai-response-section"><div class="ai-verdict">
+      ${stockGainPct(stock) > 15 ? `${ticker} is a strong performer in your portfolio at ${fmtPct(stockGainPct(stock))}. News sentiment is ${sentLabel.toLowerCase()}.`
+        : stockGainPct(stock) < -10 ? `${ticker} is underperforming at ${fmtPct(stockGainPct(stock))}. News sentiment is ${sentLabel.toLowerCase()}. Monitor for fundamental changes.`
+        : `${ticker} shows moderate returns at ${fmtPct(stockGainPct(stock))}. News sentiment is ${sentLabel.toLowerCase()}.`}
+    </div></div>` : ''}`;
+
+  return { html, sources };
+}
+
+function generateSectorAnalysis() {
+  if (!portfolio.length) return { html: '<p>Add stocks to see sector analysis.</p>', sources: [] };
+
+  const tv = totalValue();
+  const sectorMap = {};
+  portfolio.forEach(s => {
+    const sec = getSector(s.ticker);
+    if (!sectorMap[sec]) sectorMap[sec] = { value: 0, dayGain: 0, stocks: [] };
+    sectorMap[sec].value += stockValue(s);
+    sectorMap[sec].dayGain += (s.change || 0) * s.shares;
+    sectorMap[sec].stocks.push(s);
+  });
+
+  const sortedSectors = Object.entries(sectorMap).sort((a, b) => b[1].value - a[1].value);
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Sector Exposure</div>
+      ${sortedSectors.map(([sector, data]) => `
+        <div class="ai-sector-card">
+          <div class="ai-sector-header">
+            <strong>${sector}</strong>
+            <span>${(data.value / tv * 100).toFixed(1)}% · ${fmtUSD(data.value)}</span>
+          </div>
+          <div class="ai-alloc-bar"><div class="ai-alloc-fill" style="width:${(data.value / tv * 100)}%;background:var(--teal)"></div></div>
+          <div class="ai-sector-stocks">${data.stocks.map(s => `<span class="ai-sector-tag">${s.ticker} <span class="${signCls(s.changePct)}">${s.changePct != null ? fmtPct(s.changePct) : ''}</span></span>`).join('')}</div>
+        </div>`).join('')}
+    </div>`;
+
+  return { html, sources: [] };
+}
+
+function generateGainLossReport() {
+  if (!portfolio.length) return { html: '<p>Add stocks to see gain/loss report.</p>', sources: [] };
+
+  const sorted = [...portfolio].sort((a, b) => stockGain(b) - stockGain(a));
+  const totalG = totalValue() - totalCost();
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Gain / Loss Report</div>
+      <div class="ai-metrics-row">
+        <div class="ai-metric"><div class="ai-metric-label">Total Return</div><div class="ai-metric-value ${signCls(totalG)}">${fmtUSD(totalG)}</div></div>
+        <div class="ai-metric"><div class="ai-metric-label">Invested</div><div class="ai-metric-value">${fmtUSD(totalCost())}</div></div>
+      </div>
+    </div>
+    <div class="ai-response-section">
+      <div class="ai-section-title">By Position</div>
+      ${sorted.map(s => `
+        <div class="ai-mover-row">
+          <strong>${s.ticker}</strong>
+          <span class="ai-mover-name">${fmtUSD(stockCost(s))} → ${fmtUSD(stockValue(s))}</span>
+          <span class="ai-mover-change ${signCls(stockGain(s))}">${fmtUSD(stockGain(s))} (${fmtPct(stockGainPct(s))})</span>
+        </div>`).join('')}
+    </div>`;
+
+  return { html, sources: [] };
+}
+
+function generateComparison(q) {
+  // Try to find two tickers in the query
+  const tickers = portfolio.map(s => s.ticker).filter(t => q.includes(t.toLowerCase()));
+  if (tickers.length < 2) return { html: '<p>Mention two stocks from your portfolio to compare, e.g. "Compare AAPL vs MSFT".</p>', sources: [] };
+
+  const [s1, s2] = [portfolio.find(s => s.ticker === tickers[0]), portfolio.find(s => s.ticker === tickers[1])];
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">${s1.ticker} vs ${s2.ticker}</div>
+      <table class="ai-compare-table">
+        <tr><th></th><th>${s1.ticker}</th><th>${s2.ticker}</th></tr>
+        <tr><td>Price</td><td>$${fmt(s1.price)}</td><td>$${fmt(s2.price)}</td></tr>
+        <tr><td>Day Change</td><td class="${signCls(s1.changePct)}">${fmtPct(s1.changePct || 0)}</td><td class="${signCls(s2.changePct)}">${fmtPct(s2.changePct || 0)}</td></tr>
+        <tr><td>Your Return</td><td class="${signCls(stockGainPct(s1))}">${fmtPct(stockGainPct(s1))}</td><td class="${signCls(stockGainPct(s2))}">${fmtPct(stockGainPct(s2))}</td></tr>
+        <tr><td>Position Value</td><td>${fmtUSD(stockValue(s1))}</td><td>${fmtUSD(stockValue(s2))}</td></tr>
+        <tr><td>P&L</td><td class="${signCls(stockGain(s1))}">${fmtUSD(stockGain(s1))}</td><td class="${signCls(stockGain(s2))}">${fmtUSD(stockGain(s2))}</td></tr>
+        <tr><td>Allocation</td><td>${(stockValue(s1) / totalValue() * 100).toFixed(1)}%</td><td>${(stockValue(s2) / totalValue() * 100).toFixed(1)}%</td></tr>
+      </table>
+    </div>`;
+
+  return { html, sources: [] };
+}
+
+async function generateNewsDigest(q) {
+  const tickerMatch = findTickerInQuery(q);
+  const tickers = tickerMatch ? [tickerMatch] : portfolio.map(s => s.ticker).slice(0, 3);
+
+  let allArticles = [];
+  for (const t of tickers) {
+    const arts = await getCachedNews(t);
+    allArticles.push(...arts.slice(0, 5).map(a => ({ ...a, _ticker: t })));
+  }
+  allArticles.sort((a, b) => (b.datetime || 0) - (a.datetime || 0));
+  allArticles = allArticles.slice(0, 8);
+
+  const sources = allArticles.filter(a => a.url).slice(0, 4).map(a => ({ name: a.source || 'News', url: a.url }));
+
+  const html = `
+    <div class="ai-response-section">
+      <div class="ai-section-title">Latest News ${tickerMatch ? `for ${tickerMatch}` : 'for Your Portfolio'}</div>
+      ${allArticles.map(a => {
+        const s = analyzeSentiment(a.headline + ' ' + (a.summary || ''));
+        return `
+          <a class="ai-news-item" href="${escHtml(a.url || '#')}" target="_blank" rel="noopener noreferrer">
+            <span class="ai-headline-dot" style="background:${s.color}"></span>
+            <div class="ai-news-body">
+              <div class="ai-news-meta">
+                <span class="ai-news-source">${escHtml(a.source || '')}</span>
+                <span class="ai-news-ticker">${a._ticker}</span>
+                <span class="ai-sentiment-tag" style="color:${s.color}">${s.label}</span>
+              </div>
+              <div class="ai-news-headline">${escHtml(a.headline || '')}</div>
+            </div>
+          </a>`;
+      }).join('')}
+    </div>`;
+
+  return { html, sources };
+}
+
+function generateDisclaimer() {
+  return {
+    html: `
+      <div class="ai-response-section">
+        <div class="ai-section-title">Important Disclaimer</div>
+        <p class="ai-response-text">I provide data-driven analysis and sentiment scoring, but <strong>I cannot give buy, sell, or hold recommendations</strong>. Always do your own research and consult a licensed financial advisor before making investment decisions.</p>
+        <p class="ai-response-text">Here's what I can help with:</p>
+        <div class="ai-finding"><span class="ai-finding-icon neu">◆</span> Portfolio performance analysis</div>
+        <div class="ai-finding"><span class="ai-finding-icon neu">◆</span> News sentiment scoring</div>
+        <div class="ai-finding"><span class="ai-finding-icon neu">◆</span> Diversification insights</div>
+        <div class="ai-finding"><span class="ai-finding-icon neu">◆</span> Stock comparisons & sector analysis</div>
+      </div>`,
+    sources: []
+  };
+}
+
+// Legacy function — now auto-sends a welcome analysis
+function generateAiInsight() {
+  // Auto-generate initial insight as first chat message if chat is empty
+  if (chatHistory.length === 0 && portfolio.length > 0) {
+    const msgs = document.getElementById('ai-chat-messages');
+    if (msgs && msgs.querySelector('.ai-welcome-msg')) {
+      // Update welcome subtitle with live data
+      const sub = msgs.querySelector('.ai-welcome-sub');
+      if (sub) {
+        const tv = totalValue(), tc = totalCost(), gain = tv - tc, gainPct = tc ? (gain / tc) * 100 : 0;
+        sub.innerHTML = `Portfolio: <strong>${fmtUSD(tv)}</strong> · Return: <strong class="${signCls(gain)}">${fmtPct(gainPct)}</strong> · ${portfolio.length} position${portfolio.length > 1 ? 's' : ''}`;
+      }
+    }
+  }
+}
+
+// Chat input enter key
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    const input = document.getElementById('ai-chat-input');
+    if (input) {
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') sendChatMessage();
+      });
+    }
+  }, 100);
+});
 
 // ── Market Status ─────────────────────────────────────────────────────────────
 function setMarketStatus() {
