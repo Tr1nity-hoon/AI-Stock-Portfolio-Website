@@ -3,108 +3,178 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Stock Portfolio</title>
+  <title>Quantara · AI Portfolio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Animated background -->
-  <div class="bg-canvas">
-    <div class="aurora aurora-1"></div>
-    <div class="aurora aurora-2"></div>
-    <div class="aurora aurora-3"></div>
-    <div class="bg-grid"></div>
-  </div>
 
-  <!-- API Key Modal -->
-  <div id="api-modal" class="modal-overlay">
-    <div class="modal-glass">
-      <div class="modal-icon">🔑</div>
-      <h2>Change API Key</h2>
-      <p>Enter a <strong>Finnhub</strong> API key to use your own account.<br/>
-         Get a free key at <a href="https://finnhub.io/register" target="_blank">finnhub.io</a></p>
+<!-- Background -->
+<div class="bg-canvas">
+  <div class="aurora aurora-1"></div>
+  <div class="aurora aurora-2"></div>
+  <div class="aurora aurora-3"></div>
+  <div class="bg-grid"></div>
+</div>
+
+<!-- ── API Key Modal ─────────────────────────────────── -->
+<div id="api-modal" class="modal-overlay hidden">
+  <div class="modal-glass">
+    <div class="modal-icon">🔑</div>
+    <h2>Change API Key</h2>
+    <p>Enter a <strong>Finnhub</strong> API key to use your own account.<br/>
+       Get a free key at <a href="https://finnhub.io/register" target="_blank">finnhub.io</a></p>
+    <div class="input-group row-flex">
+      <input type="text" id="api-key-input" placeholder="Finnhub API key" autocomplete="off" />
+      <button class="btn-primary" onclick="saveApiKey()">Connect</button>
+    </div>
+    <button class="btn-ghost" style="margin-top:10px;width:100%" onclick="useDemoMode()">Use Demo Mode</button>
+  </div>
+</div>
+
+<!-- ── Add Stock Modal ───────────────────────────────── -->
+<div id="add-stock-modal" class="modal-overlay hidden">
+  <div class="modal-glass">
+    <div class="modal-icon">📈</div>
+    <h2>Add to <span id="add-modal-pf-name">Portfolio</span></h2>
+    <p>Search a symbol or company name, then enter your position.</p>
+    <div class="input-row">
+      <div class="input-group ticker-autocomplete-wrap">
+        <label>Symbol / Company</label>
+        <input type="text" id="new-ticker" placeholder="Search…" autocomplete="off" />
+        <div class="autocomplete-dropdown hidden" id="ticker-dropdown"></div>
+      </div>
       <div class="input-group">
-        <input type="text" id="api-key-input" placeholder="Finnhub API key" autocomplete="off" />
-        <button class="btn-primary" onclick="saveApiKey()">Connect</button>
+        <label>Shares</label>
+        <input type="number" id="new-shares" placeholder="10" min="0.001" step="0.001" />
       </div>
-      <button class="btn-ghost" onclick="useDemoMode()">Use Demo Mode (simulated data)</button>
-    </div>
-  </div>
-
-  <!-- Add Stock Modal -->
-  <div id="add-stock-modal" class="modal-overlay hidden">
-    <div class="modal-glass">
-      <div class="modal-icon">📈</div>
-      <h2>Add Stock</h2>
-      <p>Enter a ticker symbol and the number of shares you hold.</p>
-      <div class="input-row">
-        <div class="input-group ticker-autocomplete-wrap">
-          <label>Ticker Symbol</label>
-          <input type="text" id="new-ticker" placeholder="Search symbol or company…" autocomplete="off" />
-          <div class="autocomplete-dropdown hidden" id="ticker-dropdown"></div>
-        </div>
-        <div class="input-group">
-          <label>Shares</label>
-          <input type="number" id="new-shares" placeholder="e.g. 10" min="0.001" step="0.001" />
-        </div>
-        <div class="input-group">
-          <label>Avg. Buy Price ($)</label>
-          <input type="number" id="new-cost" placeholder="e.g. 150.00" min="0" step="0.01" />
-        </div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-ghost" onclick="closeAddModal()">Cancel</button>
-        <button class="btn-primary" onclick="addStock()">Add to Portfolio</button>
+      <div class="input-group">
+        <label>Avg Buy Price ($)</label>
+        <input type="number" id="new-cost" placeholder="150.00" min="0" step="0.01" />
       </div>
     </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeAddModal()">Cancel</button>
+      <button class="btn-primary" onclick="addStock()">Add Stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── New Portfolio Modal ───────────────────────────── -->
+<div id="new-pf-modal" class="modal-overlay hidden">
+  <div class="modal-glass" style="max-width:380px">
+    <div class="modal-icon">🗂</div>
+    <h2>New Portfolio</h2>
+    <div class="input-group" style="margin-bottom:16px">
+      <label>Portfolio Name</label>
+      <input type="text" id="new-pf-name" placeholder="e.g. Tech Growth, Dividend…" maxlength="32" />
+    </div>
+    <div class="pf-color-picker" id="pf-color-picker"></div>
+    <div class="modal-actions" style="margin-top:20px">
+      <button class="btn-ghost" onclick="closeNewPfModal()">Cancel</button>
+      <button class="btn-primary" onclick="confirmCreatePortfolio()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Detail Modal ──────────────────────────────────── -->
+<div id="detail-modal" class="modal-overlay hidden" onclick="handleDetailOverlayClick(event)">
+  <div class="modal-glass detail-glass">
+    <button class="detail-close" onclick="closeDetailModal()">✕</button>
+    <div id="detail-header" class="detail-header"></div>
+    <div class="detail-range-tabs">
+      <button class="range-btn active" data-range="D" onclick="loadDetailRange('D',this)">1D</button>
+      <button class="range-btn" data-range="W" onclick="loadDetailRange('W',this)">1W</button>
+      <button class="range-btn" data-range="M" onclick="loadDetailRange('M',this)">1M</button>
+      <button class="range-btn" data-range="3M" onclick="loadDetailRange('3M',this)">3M</button>
+    </div>
+    <div class="detail-chart-wrap">
+      <canvas id="detail-chart" height="220"></canvas>
+      <div class="detail-loading" id="detail-chart-loading">
+        <div class="loading-spinner"></div>Loading chart…
+      </div>
+    </div>
+    <div class="detail-bottom">
+      <div class="detail-metrics-card glass-card" id="detail-metrics">
+        <div class="detail-section-label">Key Metrics</div>
+      </div>
+      <div class="detail-news-card glass-card">
+        <div class="detail-section-label">Recent News</div>
+        <div id="detail-news">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════════════════ -->
+<div class="app" id="main-app">
+
+  <!-- Header -->
+  <header class="header glass-nav">
+    <div class="header-left">
+      <div class="logo">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">Quantara</span>
+      </div>
+      <div class="market-badge">
+        <span class="dot" id="market-dot"></span>
+        <span id="market-status">Loading…</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="api-indicator" id="api-indicator" onclick="openApiModal()" title="API settings">
+        <span class="dot" id="api-dot"></span>
+        <span id="api-label">Live</span>
+      </div>
+      <button class="btn-icon" onclick="refreshAll()" title="Refresh prices">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+      </button>
+      <button class="btn-primary" onclick="openAddModal()">+ Add Stock</button>
+    </div>
+  </header>
+
+  <!-- Portfolio Switcher -->
+  <div class="pf-bar glass-nav-sub">
+    <div class="pf-switcher" id="pf-switcher"><!-- filled by JS --></div>
+    <button class="btn-new-pf" onclick="openNewPfModal()" title="New portfolio">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+      New
+    </button>
   </div>
 
-  <!-- Main App -->
-  <div class="app" id="main-app">
+  <!-- Tab Bar -->
+  <div class="tab-bar glass-nav-sub">
+    <button class="tab-btn active" data-tab="overview"  onclick="switchTab('overview')">Overview</button>
+    <button class="tab-btn"        data-tab="holdings"  onclick="switchTab('holdings')">Holdings</button>
+    <button class="tab-btn"        data-tab="charts"    onclick="switchTab('charts')">Charts</button>
+    <button class="tab-btn"        data-tab="news"      onclick="switchTab('news')">
+      News <span class="tab-badge" id="news-badge"></span>
+    </button>
+  </div>
 
-    <!-- Header -->
-    <header class="header glass-nav">
-      <div class="header-left">
-        <div class="logo">
-          <span class="logo-icon">◈</span>
-          <span class="logo-text">Quantara</span>
-        </div>
-        <div class="market-badge" id="market-badge">
-          <span class="dot live"></span>
-          <span id="market-status">Loading…</span>
-        </div>
-      </div>
-      <div class="header-right">
-        <div class="api-indicator" id="api-indicator" onclick="openApiModal()">
-          <span class="dot" id="api-dot"></span>
-          <span id="api-label">Demo</span>
-        </div>
-        <button class="btn-icon" onclick="refreshAll()" title="Refresh prices">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-        </button>
-        <button class="btn-primary" onclick="openAddModal()">+ Add Stock</button>
-      </div>
-    </header>
+  <main class="main-content">
 
-    <main class="main-content">
+    <!-- ── Overview Tab ─────────────────────────────── -->
+    <div class="tab-pane active" id="tab-overview">
 
-      <!-- Portfolio Summary -->
-      <section class="summary-section">
-        <div class="summary-card glass-card hero-card">
+      <div class="summary-section">
+        <div class="glass-card hero-card">
           <div class="hero-label">Total Portfolio Value</div>
           <div class="hero-value" id="total-value">$—</div>
           <div class="hero-meta">
-            <span class="change-badge" id="total-change-badge">—</span>
+            <span class="change-badge flat" id="total-change-badge">—</span>
             <span class="hero-sub" id="total-change-dollar">all time</span>
           </div>
-          <div class="sparkline-mini" id="portfolio-sparkline"></div>
+          <div class="sparkline-mini"><canvas id="portfolio-sparkline"></canvas></div>
         </div>
 
         <div class="stats-grid">
           <div class="stat-card glass-card">
-            <div class="stat-icon green">↑</div>
+            <div class="stat-icon teal">↑</div>
             <div class="stat-label">Day's Gain</div>
             <div class="stat-value" id="day-gain">$—</div>
           </div>
@@ -119,105 +189,117 @@
             <div class="stat-value" id="positions-count">—</div>
           </div>
           <div class="stat-card glass-card">
-            <div class="stat-icon orange">★</div>
-            <div class="stat-label">Best Performer</div>
+            <div class="stat-icon amber">★</div>
+            <div class="stat-label">Best Today</div>
             <div class="stat-value" id="best-performer">—</div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- AI Insight Banner -->
-      <div class="ai-banner glass-card" id="ai-banner">
+      <!-- AI Insight -->
+      <div class="ai-banner glass-card">
         <div class="ai-banner-icon">✦</div>
         <div class="ai-banner-text">
-          <div class="ai-banner-label">AI Portfolio Insight</div>
+          <div class="ai-banner-label">AI Insight</div>
           <div class="ai-banner-content" id="ai-insight">Analyzing your portfolio…</div>
         </div>
         <div class="ai-banner-pulse"></div>
       </div>
 
-      <!-- Holdings Table -->
-      <section class="holdings-section">
-        <div class="section-header">
-          <h2>Holdings</h2>
-          <div class="section-actions">
-            <select class="sort-select glass-input" id="sort-select" onchange="sortHoldings()">
-              <option value="value">Sort by Value</option>
-              <option value="gain_pct">Sort by Gain %</option>
-              <option value="price">Sort by Price</option>
-              <option value="name">Sort by Symbol</option>
-            </select>
-          </div>
-        </div>
+      <!-- Top Movers -->
+      <div class="movers-section" id="movers-section"></div>
 
-        <div class="holdings-grid" id="holdings-grid">
-          <div class="empty-state" id="empty-state">
-            <div class="empty-icon">📊</div>
-            <p>No stocks yet — click <strong>+ Add Stock</strong> to begin</p>
-          </div>
-        </div>
-      </section>
+    </div>
 
-      <!-- Allocation Chart -->
-      <section class="charts-section">
-        <div class="chart-card glass-card">
-          <h3>Allocation</h3>
-          <div class="donut-wrap">
-            <canvas id="donut-chart" width="220" height="220"></canvas>
-            <div class="donut-legend" id="donut-legend"></div>
-          </div>
-        </div>
-        <div class="chart-card glass-card">
-          <h3>Performance vs. S&P 500</h3>
-          <canvas id="perf-chart" width="100%" height="200"></canvas>
-          <div class="chart-note">*Simulated comparison for illustration</div>
-        </div>
-      </section>
-
-      <!-- Last Updated -->
-      <div class="footer-bar">
-        <span id="last-updated">Prices not yet loaded</span>
-        <span>Powered by Finnhub · <a href="https://finnhub.io" target="_blank">finnhub.io</a></span>
+    <!-- ── Holdings Tab ──────────────────────────────── -->
+    <div class="tab-pane" id="tab-holdings">
+      <div class="section-header">
+        <h2>Holdings <span class="count-badge" id="holdings-count"></span></h2>
+        <select class="glass-input sort-select" id="sort-select" onchange="sortHoldings()">
+          <option value="value">By Value</option>
+          <option value="gain_pct">By Gain %</option>
+          <option value="price">By Price</option>
+          <option value="name">By Symbol</option>
+        </select>
       </div>
-
-    </main>
-  </div>
-
-  <!-- Detail Modal -->
-  <div id="detail-modal" class="modal-overlay hidden" onclick="handleDetailOverlayClick(event)">
-    <div class="modal-glass detail-glass">
-      <button class="detail-close" onclick="closeDetailModal()">✕</button>
-
-      <div id="detail-header" class="detail-header"></div>
-
-      <div class="detail-range-tabs">
-        <button class="range-btn active" data-range="D" onclick="loadDetailRange('D',this)">1D</button>
-        <button class="range-btn" data-range="W" onclick="loadDetailRange('W',this)">1W</button>
-        <button class="range-btn" data-range="M" onclick="loadDetailRange('M',this)">1M</button>
-        <button class="range-btn" data-range="3M" onclick="loadDetailRange('3M',this)">3M</button>
-      </div>
-
-      <div class="detail-chart-wrap">
-        <canvas id="detail-chart" height="220"></canvas>
-        <div class="detail-loading" id="detail-chart-loading">
-          <div class="loading-spinner"></div>
-          Loading chart…
-        </div>
-      </div>
-
-      <div class="detail-bottom">
-        <div class="detail-metrics-card glass-card" id="detail-metrics">
-          <div class="detail-section-label">Key Metrics</div>
-        </div>
-        <div class="detail-news-card glass-card">
-          <div class="detail-section-label">Recent News</div>
-          <div id="detail-news">Loading…</div>
+      <div class="holdings-grid" id="holdings-grid">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">📊</div>
+          <p>No stocks yet — click <strong>+ Add Stock</strong> to begin</p>
         </div>
       </div>
     </div>
+
+    <!-- ── Charts Tab ────────────────────────────────── -->
+    <div class="tab-pane" id="tab-charts">
+      <div class="charts-full">
+
+        <div class="glass-card perf-card">
+          <div class="chart-header">
+            <h3>Portfolio vs. S&amp;P 500</h3>
+            <div class="chart-legend">
+              <span class="legend-line teal"></span><span>Your Portfolio</span>
+              <span class="legend-line muted" style="border-style:dashed"></span><span>S&amp;P 500</span>
+            </div>
+          </div>
+          <div class="perf-chart-wrap">
+            <canvas id="perf-chart"></canvas>
+          </div>
+          <div class="chart-note">Simulated historical performance based on current holdings &amp; costs</div>
+        </div>
+
+        <div class="charts-row">
+          <div class="glass-card chart-card">
+            <h3>Allocation</h3>
+            <div class="donut-wrap">
+              <canvas id="donut-chart" width="200" height="200"></canvas>
+              <div class="donut-legend" id="donut-legend"></div>
+            </div>
+          </div>
+          <div class="glass-card chart-card">
+            <h3>Gain / Loss by Position</h3>
+            <div class="bar-chart-wrap">
+              <canvas id="bar-chart" height="180"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── News Tab ──────────────────────────────────── -->
+    <div class="tab-pane" id="tab-news">
+      <div class="news-page">
+        <div class="news-col">
+          <div class="section-header">
+            <h2>Market News</h2>
+            <button class="btn-ghost btn-sm" onclick="loadNewsTab()">↻ Refresh</button>
+          </div>
+          <div id="market-news-feed" class="news-feed">
+            <div class="news-loading">Click the News tab to load…</div>
+          </div>
+        </div>
+        <div class="news-col">
+          <div class="section-header">
+            <h2>Your Portfolio News</h2>
+          </div>
+          <div id="portfolio-news-feed" class="news-feed">
+            <div class="news-loading">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="footer-bar">
+    <span id="last-updated">Prices not yet loaded</span>
+    <span>Powered by Finnhub · <a href="https://finnhub.io" target="_blank">finnhub.io</a></span>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="app.js"></script>
+</div><!-- .app -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
